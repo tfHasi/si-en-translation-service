@@ -19,17 +19,23 @@ class WhisperProcessor:
         try:
             audio = whisperx.load_audio(audio_path)
             result = self.model.transcribe(audio, language=language)
-            result = whisperx.align(result["segments"], self.align_model, self.metadata, audio, self.device)
+            aligned_result = whisperx.align(result["segments"], self.align_model, self.metadata, audio, self.device)
+            text = result.get("text", "").strip()
+            segments = aligned_result.get("segments", [])
+            if not text and segments:
+                text = " ".join([segment.get("text", "").strip() for segment in segments if segment.get("text", "").strip()])
+            
             return {
                 "success": True,
-                "text": result.get("text", "").strip(),
-                "segments": result.get("segments", []),
+                "text": text,
+                "segments": segments,
                 "language": result.get("language", language or "unknown")
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
         finally:
-            os.unlink(audio_path)
+            if os.path.exists(audio_path):
+                os.unlink(audio_path)
 
 processor_instance = None
 
