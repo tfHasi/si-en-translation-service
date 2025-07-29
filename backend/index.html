@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sinhala-English Translator</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+    
+<body>
+    <div class="container">
+        <h1>🎤 Sinhala-English Translator</h1>
+
+        <!-- Audio Transcription Section -->
+        <div class="section">
+            <h2>🎵 Audio Transcription</h2>
+            
+            <div class="upload-area" onclick="document.getElementById('audioFile').click()">
+                <input type="file" id="audioFile" accept="audio/*">
+                <p>📁 Click to upload or drag & drop audio file</p>
+                <small>Supports: MP3, WAV, M4A, FLAC, OGG</small>
+            </div>
+
+            <div class="controls">
+                <select id="audioLanguage">
+                    <option value="en">English</option>
+                    <option value="si">Sinhala</option>
+                    <option value="auto">Auto-detect</option>
+                </select>
+                <button id="transcribeBtn" onclick="transcribeAudio()">
+                    <span id="transcribeText">🎤 Transcribe</span>
+                </button>
+            </div>
+
+            <div id="transcriptionResult" style="display: none;"></div>
+        </div>
+
+        <!-- Text Translation Section -->
+        <div class="section">
+            <h2>🌐 Text Translation</h2>
+            
+            <div class="translate-controls">
+                <select id="sourceLanguage">
+                    <option value="en">English</option>
+                    <option value="si">Sinhala</option>
+                </select>
+                <button class="lang-swap" onclick="swapLanguages()">⇄</button>
+                <select id="targetLanguage">
+                    <option value="si">Sinhala</option>
+                    <option value="en">English</option>
+                </select>
+                <button onclick="translateText()">
+                    <span id="translateTextBtn">🌐 Translate</span>
+                </button>
+            </div>
+
+            <textarea id="inputText" placeholder="Enter text to translate or use transcribed text..."></textarea>
+
+            <div id="translationResult" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+
+        // File upload handling
+        document.getElementById('audioFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.querySelector('.upload-area p').textContent = `Selected: ${file.name}`;
+            }
+        });
+
+        // Drag & drop functionality
+        const uploadArea = document.querySelector('.upload-area');
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, () => uploadArea.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('dragover'), false);
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                document.getElementById('audioFile').files = files;
+                document.querySelector('.upload-area p').textContent = `Selected: ${files[0].name}`;
+            }
+        });
+
+        async function transcribeAudio() {
+            const fileInput = document.getElementById('audioFile');
+            const language = document.getElementById('audioLanguage').value;
+            const btn = document.getElementById('transcribeBtn');
+            const btnText = document.getElementById('transcribeText');
+            
+            if (!fileInput.files[0]) {
+                alert('Please select an audio file');
+                return;
+            }
+
+            btn.disabled = true;
+            btnText.innerHTML = '<span class="loading"></span> Transcribing...';
+
+            const formData = new FormData();
+            formData.append('audio', fileInput.files[0]);
+            formData.append('language', language);
+
+            try {
+                const response = await fetch(`${API_BASE}/transcribe`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                displayTranscriptionResult(result);
+
+                if (result.success && result.transcribed_text) {
+                    // Auto-fill translation input
+                    document.getElementById('inputText').value = result.transcribed_text;
+                    
+                    // Auto-set language based on detection
+                    if (result.detected_language === 'si') {
+                        document.getElementById('sourceLanguage').value = 'si';
+                        document.getElementById('targetLanguage').value = 'en';
+                    } else {
+                        document.getElementById('sourceLanguage').value = 'en';
+                        document.getElementById('targetLanguage').value = 'si';
+                    }
+                }
+            } catch (error) {
+                displayTranscriptionResult({success: false, error: error.message});
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = '🎤 Transcribe';
+            }
+        }
+
+        function displayTranscriptionResult(result) {
+            const resultDiv = document.getElementById('transcriptionResult');
+            
+            if (result.success) {
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        <h3>✅ Transcription Result</h3>
+                        <p><strong>Text:</strong> ${result.transcribed_text || 'No text detected'}</p>
+                        <p><strong>Language:</strong> ${result.detected_language}</p>
+                        <p><strong>Segments:</strong> ${result.segment_count || 0}</p>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Transcription Failed</h3>
+                        <p>${result.error}</p>
+                    </div>
+                `;
+            }
+            
+            resultDiv.style.display = 'block';
+        }
+
+        async function translateText() {
+            const inputText = document.getElementById('inputText').value.trim();
+            const sourceLanguage = document.getElementById('sourceLanguage').value;
+            const targetLanguage = document.getElementById('targetLanguage').value;
+            const btnText = document.getElementById('translateTextBtn');
+            
+            if (!inputText) {
+                alert('Please enter text to translate');
+                return;
+            }
+
+            if (sourceLanguage === targetLanguage) {
+                alert('Source and target languages cannot be the same');
+                return;
+            }
+
+            btnText.innerHTML = '<span class="loading"></span> Translating...';
+
+            try {
+                const response = await fetch(`${API_BASE}/translate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: inputText,
+                        source_lang: sourceLanguage,
+                        target_lang: targetLanguage
+                    })
+                });
+
+                const result = await response.json();
+                displayTranslationResult(result);
+            } catch (error) {
+                displayTranslationResult({success: false, error: error.message});
+            } finally {
+                btnText.textContent = '🌐 Translate';
+            }
+        }
+
+        function displayTranslationResult(result) {
+            const resultDiv = document.getElementById('translationResult');
+            
+            if (result.success) {
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        <h3>✅ Translation Result</h3>
+                        <p><strong>Original (${result.source_lang}):</strong> ${result.original_text}</p>
+                        <p><strong>Translated (${result.target_lang}):</strong> ${result.translated_text}</p>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Translation Failed</h3>
+                        <p>${result.error}</p>
+                    </div>
+                `;
+            }
+            
+            resultDiv.style.display = 'block';
+        }
+
+        function swapLanguages() {
+            const sourceSelect = document.getElementById('sourceLanguage');
+            const targetSelect = document.getElementById('targetLanguage');
+            
+            const tempValue = sourceSelect.value;
+            sourceSelect.value = targetSelect.value;
+            targetSelect.value = tempValue;
+        }
+    </script>
+</body>
+</html>
