@@ -1,12 +1,14 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from routes.translate import translate_bp
+from routes.speak import voice_bp
 import os
 
 app = Flask(__name__)
 CORS(app)
 
 app.register_blueprint(translate_bp)
+app.register_blueprint(voice_bp)
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
